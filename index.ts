@@ -1,7 +1,8 @@
 import { groqService } from "./services/groq";
+import { cerebrasService } from "./services/cerebras";
 import type { AIService, ChatMessage } from "./types";
 
-const services: AIService[] = [groqService];
+const services: AIService[] = [groqService, cerebrasService];
 let currentServiceIndex = 0;
 
 function getNextService() {
@@ -20,6 +21,9 @@ const server = Bun.serve({
                 const { messages } = (await request.json()) as { messages: ChatMessage[] };
                 const service = getNextService();
                 const stream = await service?.chat(messages);
+
+                // console.log(`Using service: ${service?.name}`);
+
                 return new Response(stream, {
                     headers: {
                         "Content-Type": "text/event-stream",
