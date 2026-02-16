@@ -1,6 +1,13 @@
+import "dotenv/config";
+import express from "express";
 import { groqService } from "./services/groq";
 import { cerebrasService } from "./services/cerebras";
 import type { AIService, ChatMessage } from "./types";
+
+const app = express();
+const PORT = process.env.PORT ?? 3000;
+
+app.use(express.json());
 
 const services: AIService[] = [groqService, cerebrasService];
 let currentServiceIndex = 0;
@@ -11,34 +18,29 @@ function getNextService() {
     return service;
 }
 
-const server = Bun.serve({
-    port: process.env.PORT ?? 3000,
-    async fetch(request) {
-        const { pathname } = new URL(request.url);
+app.post("/chat", async (req, res) => {
+    try {
+        const { messages } = req.body as { messages: ChatMessage[] };
+        const service = getNextService();
+        const stream = await service?.chat(messages);
 
-        if (request.method === "POST" && pathname === "/chat") {
-            try {
-                const { messages } = (await request.json()) as { messages: ChatMessage[] };
-                const service = getNextService();
-                const stream = await service?.chat(messages);
+        console.log(`Using service: ${service?.name}`);
 
-                // console.log(`Using service: ${service?.name}`);
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
 
-                return new Response(stream, {
-                    headers: {
-                        "Content-Type": "text/event-stream",
-                        "Cache-Control": "no-cache",
-                        Connection: "keep-alive",
-                    },
-                });
-            } catch (error) {
-                console.error("Error handling /chat request:", error);
-                return new Response("Internal Server Error", { status: 500 });
-            }
+        for await (const chunk of stream) {
+            res.write(chunk);
         }
 
-        return new Response("Not Found", { status: 404 });
-    },
+        res.end();
+    } catch (error) {
+        console.error("Error handling /chat request:", error);
+        res.status(500).send("Internal Server Error");
+    }
 });
 
-console.log(`Server running at http://localhost:${server.port}`);
+app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+});
