@@ -1,13 +1,19 @@
 import "dotenv/config";
 import express from "express";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { groqService } from "./services/groq";
 import { cerebrasService } from "./services/cerebras";
 import type { AIService, ChatMessage } from "./types";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 
 app.use(express.json());
+app.use(express.static(join(__dirname, "public")));
 
 const services: AIService[] = [groqService, cerebrasService];
 let currentServiceIndex = 0;
@@ -29,6 +35,11 @@ app.post("/chat", async (req, res) => {
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
+
+        if (!stream) {
+            res.status(500).send("No AI service available");
+            return;
+        }
 
         for await (const chunk of stream) {
             res.write(chunk);
